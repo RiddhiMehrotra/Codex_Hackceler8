@@ -1,2 +1,5 @@
 ph
 turbidity
+PM2.5
+PM10
+Air Temp (°C)

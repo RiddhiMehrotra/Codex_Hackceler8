@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function Login(){
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
@@ -11,37 +11,41 @@ export default function Login(){
   const loc = useLocation();
   const navigate = useNavigate();
 
-  // Show animated banner if we just arrived from signup
+  // show banner if redirected from signup
   useEffect(() => {
     if (loc.state?.justSignedUp) {
       setShowBanner(true);
-      // prefill email for convenience
-      if (loc.state.email) setEmail(loc.state.email);
+      if (loc.state.email) setEmail(loc.state.email); // pre-fill email
       const t = setTimeout(() => setShowBanner(false), 4000);
       return () => clearTimeout(t);
     }
   }, [loc.state]);
 
-  async function handleLogin(e){
+  async function handleLogin(e) {
     e.preventDefault();
-    setLoading(true); setMsg("");
-    try{
+    setLoading(true);
+    setMsg("");
+    try {
       const res = await fetch("http://localhost:4000/api/auth/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (res.ok){
+      if (res.ok) {
+        // ✅ Save token + user info
         localStorage.setItem("token", data.token);
-        // Go to Home after successful login
+        localStorage.setItem("userEmail", data.user?.email || "");
+        localStorage.setItem("userId", data.user?.id || "");
+
+        // ✅ Redirect to Home with a "justLoggedIn" flag
         navigate("/", { replace: true, state: { justLoggedIn: true } });
       } else {
         setMsg(data.error || "Login failed");
       }
-    }catch(err){
+    } catch (err) {
       setMsg(err.message);
-    }finally{
+    } finally {
       setLoading(false);
     }
   }
@@ -68,7 +72,8 @@ export default function Login(){
       </AnimatePresence>
 
       <motion.h1
-        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
         className="text-3xl font-extrabold mb-6"
       >
         Welcome back
@@ -77,13 +82,19 @@ export default function Login(){
       <form onSubmit={handleLogin} className="space-y-4">
         <input
           className="w-full border rounded px-3 py-2"
-          type="email" placeholder="Email"
-          value={email} onChange={(e)=>setEmail(e.target.value)} required
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
         />
         <input
           className="w-full border rounded px-3 py-2"
-          type="password" placeholder="Password"
-          value={password} onChange={(e)=>setPassword(e.target.value)} required
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
         />
         <button
           disabled={loading}
@@ -98,4 +109,3 @@ export default function Login(){
     </div>
   );
 }
-

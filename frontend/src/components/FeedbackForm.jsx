@@ -34,7 +34,7 @@ export default function FeedbackForm(){
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.5 }}
-      className="bg-white rounded-2xl shadow p-6 space-y-4"
+      className="bg-white rounded-2xl shadow p-10 space-y-4"
     >
       <h3 className="text-xl font-semibold">Send Feedback</h3>
       <input name="name" placeholder="Your name" className="w-full border rounded px-3 py-2" required />

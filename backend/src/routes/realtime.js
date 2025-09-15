@@ -1,178 +1,238 @@
 import { Router } from 'express'
 import fs from 'fs'
-import path, { dirname } from 'path'
-import { fileURLToPath } from 'url'
+import path from 'path'
 import { parse } from 'csv-parse/sync'
-import dayjs from 'dayjs'
 
 const router = Router()
 
-// Resolve ../../ml/data relative to this file (projectRoot/ml/data)
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = path.resolve(__dirname, '../../ml/data')
+// --- Directories where we’ll look for data
+const DATA_DIRS = [
+  path.resolve(process.cwd(), 'ml', 'artifacts', 'data'),          // top-level ml/artifacts/data
+  path.resolve(process.cwd(), 'ml', 'data'),                       // top-level ml/data
+  path.resolve(process.cwd(), 'backend', 'ml', 'artifacts', 'data'), // fallback inside backend
+  path.resolve(process.cwd(), 'backend', 'ml', 'data')               // fallback inside backend
+]
 
-// ---------- helpers ----------
-function canonKey(k) {
+
+function getDataDir() {
+  for (const dir of DATA_DIRS) {
+    if (fs.existsSync(dir)) return dir
+  }
+  console.warn('Realtime: no data directory found. Checked:', DATA_DIRS)
+  return null
+}
+
+// -------------------- helpers --------------------
+function detectDelimiter(line) {
+  const c = line.split(',').length
+  const s = line.split(';').length
+  const t = line.split('\t').length
+  const best = Math.max(c, s, t)
+  if (best === s) return ';'
+  if (best === t) return '\t'
+  return ','
+}
+
+function coerce(n) {
+  if (n === null || n === undefined) return null
+  if (typeof n === 'number') return Number.isFinite(n) ? n : null
+  let s = String(n).trim()
+  if (s.includes(',') && !s.includes('.')) s = s.replace(',', '.')
+  else s = s.replace(/,(?=\d{3}\b)/g, '')
+  s = s.replace(/[^0-9.\-eE]/g, '')
+  if (!s || s === '-' || s === '.') return null
+  const v = Number(s)
+  return Number.isFinite(v) ? v : null
+}
+
+function canon(k) {
   return String(k ?? '').trim().toLowerCase()
     .replace(/\s+/g, '_')
     .replace(/[%°]/g, '')
     .replace(/µg\/?m3|ug\/?m3/gi, '')
 }
 
-function coerce(val) {
-  if (val === null || val === undefined) return null
-  if (typeof val === 'number') return Number.isFinite(val) ? val : null
-
-  let s = String(val).trim()
-
-  // Handle European decimal comma vs thousand separators
-  if (s.includes(',') && !s.includes('.')) {
-    // likely decimal comma, e.g. "7,2" -> "7.2"
-    s = s.replace(',', '.')
-  } else {
-    // likely thousand separators "1,234.5" -> "1234.5"
-    s = s.replace(/,(?=\d{3}\b)/g, '')
-  }
-
-  // strip anything not number-ish
-  s = s.replace(/[^0-9.\-eE]/g, '')
-  if (!s || s === '-' || s === '.') return null
-  const n = Number(s)
-  return Number.isFinite(n) ? n : null
+function tokenize(k) {
+  return String(k).replace(/[()]/g, '').split(/[^a-z0-9]+/g).filter(Boolean)
 }
 
-function mapRow(row) {
-  // Normalize keys and map common aliases
-  const out = {}
-  for (const [k, v] of Object.entries(row)) out[canonKey(k)] = v
+function scoreKey(key, wantedTokens) {
+  const toks = tokenize(key)
+  if (!toks.length) return 0
+  const canonKey = key
+  const canonWanted = wantedTokens.join('_')
+  if (canonKey === canonWanted) return 100
+  let score = 0
+  for (const t of wantedTokens) {
+    if (toks.includes(t)) score += 15
+    else if (toks.some(x => x.startsWith(t))) score += 8
+  }
+  const s = new Set(toks)
+  if (wantedTokens.includes('temperature') && (s.has('t') || s.has('temp'))) score += 10
+  if (wantedTokens.includes('humidity') && (s.has('rh') || s.has('humidity'))) score += 10
+  if (wantedTokens.includes('pm') && s.has('pm')) score += 5
+  if (wantedTokens.includes('moisture') && (s.has('vwc') || s.has('moisture'))) score += 10
+  if (wantedTokens.includes('ph') && s.has('ph')) score += 20
+  if (wantedTokens.includes('turbidity') && (s.has('ntu') || s.has('turbidity'))) score += 15
+  return score
+}
 
-  const pick = (...keys) => {
-    for (const k of keys) {
-      if (out[k] !== undefined && out[k] !== '') return coerce(out[k])
+function pickByMeaning(o, meanings) {
+  let best = { key: null, val: null, score: -1 }
+  for (const k of Object.keys(o)) {
+    for (const tokens of meanings) {
+      const sc = scoreKey(k, tokens)
+      if (sc > best.score) {
+        const v = coerce(o[k])
+        if (v !== null) best = { key: k, val: v, score: sc }
+      }
     }
-    return null
+  }
+  return best
+}
+
+function norm01(x, max = 100) {
+  if (x == null) return null
+  const n = x / max
+  return Math.max(0, Math.min(1, n))
+}
+
+// -------------------- AUTO-DETECTING mapRow --------------------
+function mapRow(row) {
+  const o = {}
+  for (const [k, v] of Object.entries(row)) o[canon(k)] = v
+
+  let ts = o.timestamp || o.ts || o.time || o.date_time || o.datetime || o.date
+  if (ts && !isNaN(Date.parse(ts))) ts = new Date(ts).toISOString()
+  else ts = new Date().toISOString()
+
+  const want = {
+    pm25: [['pm','2','5'], ['pm25']],
+    pm10: [['pm','10'], ['pm10']],
+    airTemp: [['air','temp'], ['temperature'], ['temp'], ['t']],
+    humidity: [['humidity'], ['rh']],
+    waterPh: [['ph']],
+    turbidity: [['turbidity'], ['ntu']],
+    soilMoist: [['soil','moisture'], ['moisture'], ['vwc']],
+    soilTemp: [['soil','temp'], ['soil','temperature']]
   }
 
-  // timestamp if present
-  let ts = out.timestamp || out.time || out.ts || out.date_time || out.date
-  if (ts && !isNaN(Date.parse(ts))) ts = new Date(ts).toISOString(); else ts = null
+  const got = {
+    pm25: pickByMeaning(o, want.pm25),
+    pm10: pickByMeaning(o, want.pm10),
+    airTemp: pickByMeaning(o, want.airTemp),
+    humidity: pickByMeaning(o, want.humidity),
+    waterPh: pickByMeaning(o, want.waterPh),
+    turbidity: pickByMeaning(o, want.turbidity),
+    soilMoist: pickByMeaning(o, want.soilMoist),
+    soilTemp: pickByMeaning(o, want.soilTemp)
+  }
+
+  // Heuristics: if mostly water fields → water dataset, else air
+  const airScore = Math.max(got.airTemp.score, got.humidity.score, scoreKey(Object.keys(o).join('_'), ['co','gt']))
+  const waterScore = Math.max(got.waterPh.score, got.turbidity.score, scoreKey(Object.keys(o).join('_'), ['conductivity']))
+  const isAir = airScore >= waterScore
+
+  if (isAir) {
+    if (got.airTemp.val == null) {
+      const tKey = Object.keys(o).find(k => k === 't' || k === 'temperature')
+      if (tKey) got.airTemp = { key: tKey, val: coerce(o[tKey]), score: 50 }
+    }
+    if (got.humidity.val == null) {
+      const rhKey = Object.keys(o).find(k => k === 'rh' || k === 'humidity')
+      if (rhKey) got.humidity = { key: rhKey, val: coerce(o[rhKey]), score: 50 }
+    }
+    if (got.soilMoist.val == null && got.humidity.val != null) {
+      got.soilMoist = { key: 'rh_proxy', val: norm01(got.humidity.val, 100), score: 25 }
+    }
+    if (got.soilTemp.val == null && got.airTemp.val != null) {
+      got.soilTemp = { key: 'soil_temp_proxy', val: got.airTemp.val - 5, score: 10 }
+    }
+  } else {
+    if (got.soilMoist.val == null) {
+      const ocKey = Object.keys(o).find(k => k === 'organic_carbon')
+      if (ocKey) got.soilMoist = { key: ocKey, val: norm01(coerce(o[ocKey]), 20), score: 20 }
+    }
+    if (got.soilTemp.val == null) {
+      const hardKey = Object.keys(o).find(k => k === 'hardness')
+      if (hardKey) got.soilTemp = { key: hardKey, val: coerce(o[hardKey]), score: 10 }
+    }
+  }
 
   return {
     ts,
-    air: {
-      pm25: pick('pm25','pm_2_5','pm2_5','pm-2-5'),
-      pm10: pick('pm10','pm_10'),
-      temp: pick('temp','air_temp','temperature'),
-      humidity: pick('humidity','rh')
-    },
-    water: {
-      ph: pick('ph'),
-      turbidity: pick('turbidity','ntu')
-    },
-    soil: {
-      moisture: pick('soil_moisture','soilmoisture','moisture'),
-      temp: pick('soil_temp','soiltemp')
-    },
-    flat: Object.fromEntries(Object.entries(out).map(([k, v]) => [k, coerce(v)]))
+    air: { pm25: got.pm25.val, pm10: got.pm10.val, temp: got.airTemp.val, humidity: got.humidity.val },
+    water: { ph: got.waterPh.val, turbidity: got.turbidity.val },
+    soil: { moisture: got.soilMoist.val, temp: got.soilTemp.val },
+    _meta: { isAir }
   }
 }
 
-// ---------- CSV loader ----------
+// -------------------- load CSVs --------------------
 let CACHE = []
-
-function detectDelimiter(headerLine) {
-  // Pick the delimiter that yields more fields
-  const comma = headerLine.split(',').length
-  const semi  = headerLine.split(';').length
-  const tab   = headerLine.split('\t').length
-  const best = Math.max(comma, semi, tab)
-  if (best === semi) return ';'
-  if (best === tab)  return '\t'
-  return ','
-}
-
-function parseCsv(text) {
-  // Use header line to decide delimiter, tolerate weird rows
-  const firstLine = text.split(/\r?\n/)[0] || ''
-  const delimiter = detectDelimiter(firstLine)
-
-  // If header ends with extra delimiter like "...; ;", trim it
-  const cleaned = text.replace(/(\r?\n)[;,\t]+\r?\n/g, '$1') // drop empty columns-only lines
-
-  return parse(cleaned, {
-    bom: true,
-    columns: true,                // read header row
-    skip_empty_lines: true,
-    relax_column_count: true,     // tolerate extra/missing fields
-    relax_quotes: true,
-    trim: true,
-    delimiter
-  })
-}
-
-function loadAllCSVs() {
-  if (!fs.existsSync(DATA_DIR)) {
-    console.warn('Realtime: data dir not found:', DATA_DIR)
-    CACHE = []
-    return
-  }
-  const files = fs.readdirSync(DATA_DIR).filter(f => /\.(csv|tsv)$/i.test(f))
+function loadAll() {
+  const dir = getDataDir()
+  if (!dir) { CACHE = []; return }
+  const files = fs.readdirSync(dir).filter(f => /\.(csv|tsv)$/i.test(f))
   const rows = []
   for (const f of files) {
     try {
-      const full = path.join(DATA_DIR, f)
-      const text = fs.readFileSync(full, 'utf8')
-      const records = parseCsv(text)
+      const raw = fs.readFileSync(path.join(dir, f), 'utf8')
+      const head = raw.split(/\r?\n/)[0] || ''
+      const delimiter = detectDelimiter(head)
+      const records = parse(raw, { columns: true, skip_empty_lines: true, relax_column_count: true, trim: true, delimiter })
       for (const r of records) rows.push(mapRow(r))
       console.log(`Realtime: loaded ${records.length} rows from ${f}`)
     } catch (e) {
-      console.warn(`Realtime: skipping ${f}: ${e.message}`)
+      console.warn(`Realtime: skip ${f}: ${e.message}`)
     }
   }
-  const withTs = rows.filter(r => r.ts)
-  const withoutTs = rows.filter(r => !r.ts)
-  withTs.sort((a,b) => dayjs(a.ts).valueOf() - dayjs(b.ts).valueOf())
-  CACHE = [...withTs, ...withoutTs]
-  console.log(`Realtime: total rows in cache = ${CACHE.length}`)
+  CACHE = rows
+  console.log('Realtime: cache size =', CACHE.length)
 }
+loadAll()
 
-loadAllCSVs()
+// -------------------- control & SSE --------------------
+let STREAM_ENABLED = false
+let DEFAULT_INTERVAL_MS = 2000
 
-// pointer for sequential APIs
-let idx = 0
-
-router.post('/reset', (_req,res) => { idx = 0; res.json({ ok:true, idx, total: CACHE.length }) })
-
-router.get('/next', (_req,res) => {
-  if (!CACHE.length) return res.status(404).json({ error: 'no data' })
-  const row = CACHE[idx % CACHE.length]; idx++
-  res.json(row)
+router.get('/status', (_req, res) => {
+  res.json({ ok: true, enabled: STREAM_ENABLED, intervalMs: DEFAULT_INTERVAL_MS, cacheSize: CACHE.length })
 })
 
-// Server-Sent Events stream
+router.post('/start', (req, res) => {
+  STREAM_ENABLED = true
+  const n = Number(req.body?.intervalMs)
+  if (Number.isFinite(n) && n >= 250) DEFAULT_INTERVAL_MS = n
+  res.json({ ok: true, enabled: true, intervalMs: DEFAULT_INTERVAL_MS })
+})
+
+router.post('/stop', (_req, res) => {
+  STREAM_ENABLED = false
+  res.json({ ok: true, enabled: false })
+})
+
 router.get('/stream', (req, res) => {
-  if (!CACHE.length) return res.status(404).json({ error: 'no data' })
-  const intervalMs = Math.max(250, Number(req.query.intervalMs || 2000))
+  if (!CACHE.length) return res.status(404).json({ error: 'no data in cache' })
+  if (!STREAM_ENABLED) return res.status(409).json({ error: 'stream disabled' })
+
+  const intervalMs = Math.max(250, Number(req.query.intervalMs || DEFAULT_INTERVAL_MS))
   const loop = String(req.query.loop || '1') !== '0'
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
-    'Access-Control-Allow-Origin': '*'
+    'Access-Control-Allow-Origin': '*',
   })
 
-  let localIdx = 0
+  let i = 0
   const send = () => {
-    if (localIdx >= CACHE.length) {
-      if (!loop) { clearInterval(timer); res.end(); return }
-      localIdx = 0
-    }
-    const row = CACHE[localIdx++]
-    res.write(`event: reading\n`)
-    res.write(`data: ${JSON.stringify(row)}\n\n`)
+    if (!STREAM_ENABLED) { clearInterval(timer); res.end(); return }
+    if (i >= CACHE.length) { if (!loop) { clearInterval(timer); res.end(); return } i = 0 }
+    res.write('event: reading\n')
+    res.write(`data: ${JSON.stringify(CACHE[i++])}\n\n`)
   }
-
   send()
   const timer = setInterval(send, intervalMs)
   req.on('close', () => clearInterval(timer))
