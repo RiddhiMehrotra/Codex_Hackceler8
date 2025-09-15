@@ -1,44 +1,56 @@
+// backend/src/routes/feedback.js
 import { Router } from 'express'
 import fs from 'fs'
 import path from 'path'
 
 const router = Router()
 
-// File where feedback will be saved
+// Where we persist feedback
 const FEEDBACK_FILE = path.resolve(process.cwd(), 'feedbacks.json')
 
-// Ensure file exists
-if (!fs.existsSync(FEEDBACK_FILE)) {
-  fs.writeFileSync(FEEDBACK_FILE, '[]', 'utf8')
+// Ensure the file exists
+function ensureFile() {
+  if (!fs.existsSync(FEEDBACK_FILE)) {
+    fs.writeFileSync(FEEDBACK_FILE, '[]', 'utf8')
+  }
+}
+ensureFile()
+
+function loadAll() {
+  ensureFile()
+  try {
+    const raw = fs.readFileSync(FEEDBACK_FILE, 'utf8') || '[]'
+    const data = JSON.parse(raw)
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
 }
 
-// Helper: load + save
-function loadFeedbacks() {
-  return JSON.parse(fs.readFileSync(FEEDBACK_FILE, 'utf8'))
-}
-function saveFeedbacks(data) {
-  fs.writeFileSync(FEEDBACK_FILE, JSON.stringify(data, null, 2), 'utf8')
+function saveAll(arr) {
+  fs.writeFileSync(FEEDBACK_FILE, JSON.stringify(arr, null, 2), 'utf8')
 }
 
-// POST /api/feedback → add one entry
+// POST /api/feedback  → add one feedback
 router.post('/', (req, res) => {
   try {
     const { name = '', email = '', rating = '', message = '' } = req.body || {}
-    if (!message.trim()) {
+    if (!String(message || '').trim()) {
       return res.status(400).json({ error: 'Message is required' })
     }
 
-    const all = loadFeedbacks()
     const entry = {
-      id: Date.now(),
-      name,
-      email,
-      rating,
-      message,
-      ts: new Date().toISOString()
+      id: Date.now(),                // simple unique id
+      ts: new Date().toISOString(),  // timestamp
+      name: String(name || '').trim(),
+      email: String(email || '').trim(),
+      rating: String(rating || '').trim(),
+      message: String(message || '').trim(),
     }
+
+    const all = loadAll()
     all.push(entry)
-    saveFeedbacks(all)
+    saveAll(all)
 
     res.json({ ok: true, saved: entry })
   } catch (err) {
@@ -47,13 +59,33 @@ router.post('/', (req, res) => {
   }
 })
 
-// GET /api/feedback → list all
+// GET /api/feedback  → list all feedback (JSON)
 router.get('/', (_req, res) => {
   try {
-    const all = loadFeedbacks()
+    const all = loadAll()
     res.json(all)
   } catch (err) {
     res.status(500).json({ error: 'Could not read feedbacks' })
+  }
+})
+
+// GET /api/feedback/export.csv  → download as CSV
+router.get('/export.csv', (_req, res) => {
+  try {
+    const all = loadAll()
+    const headers = ['id', 'ts', 'name', 'email', 'rating', 'message']
+    const escape = (v) =>
+      `"${String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`
+    const rows = [
+      headers.join(','),
+      ...all.map((r) => headers.map((h) => escape(r[h])).join(',')),
+    ]
+    const csv = rows.join('\n')
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename="feedbacks.csv"')
+    res.send(csv)
+  } catch (err) {
+    res.status(500).json({ error: 'Could not export CSV' })
   }
 })
 

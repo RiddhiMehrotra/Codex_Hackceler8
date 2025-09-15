@@ -2,3 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 body{@apply bg-gray-50 text-gray-900}
+/* --- simple, Tailwind-friendly animations --- */
+@keyframes float {
+  0%   { transform: translateY(0) }
+  50%  { transform: translateY(-12px) }
+  100% { transform: translateY(0) }
+}
+.animate-float { animation: float 6s ease-in-out infinite; }
+
+@keyframes blob {
+  0%,100% { transform: translate(0,0) scale(1); }
+  33%     { transform: translate(14px,-12px) scale(1.06); }
+  66%     { transform: translate(-10px,10px) scale(0.96); }
+}
+.animate-blob       { animation: blob 14s ease-in-out infinite; }
+.animate-blob-delay { animation-delay: 4s; }

@@ -2,6 +2,8 @@ import express from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
 import dotenv from 'dotenv'
+import feedbackRoutes from './routes/feedback.js'
+
 
 // Load .env (optional)
 dotenv.config()
@@ -10,7 +12,7 @@ dotenv.config()
 import authRoutes from './routes/auth.js'
 import realtimeRoutes from './routes/realtime.js'
 import solutionsRoutes from './routes/solutions.js'
-import feedbackRoutes from './routes/feedback.js'   // <-- NEW
+
 
 const app = express()
 
