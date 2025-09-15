@@ -1,6 +1,6 @@
-# hack8r – Full-Stack Starter (React + Node + ML)
+# hack8r – Climate Sustainability Action Through Technologies
 
-This repo matches the structure you specified and includes:
+This repo includes:
 - React (Vite + Tailwind) frontend
 - Node.js backend (Express, Mongo/Postgres-ready)
 - Python ML (IsolationForest) that trains on the CSV datasets placed in `ml/data/`
@@ -30,8 +30,8 @@ npm install
 npm start
 ```
 Endpoints:
-- `POST /api/predict` → body with numeric fields; returns anomaly prediction using Python `ml/predict.py`
-- `GET /api/sensors/mock` → returns a mock reading to feed the UI
+ `POST /api/predict` → body with numeric fields; returns anomaly prediction using Python `ml/predict.py`
+ `GET /api/sensors/mock` → returns a mock reading to feed the UI
 
 ### 4) Frontend (React + Vite + Tailwind)
 ```bash
@@ -39,9 +39,6 @@ cd ../frontend
 npm install
 npm run dev
 ```
-Open the URL Vite prints (usually http://localhost:5173). Login page is mocked; Dashboard hits backend.
-
 ## Datasets included
-dataset_1.csv, dataset_2.csv, dataset_3.csv
+dataset_1.csv(water_data), dataset_2.csv(Air_data), dataset_3.csv(soil_data)
 
-Good luck at the hackathon! 🎉
