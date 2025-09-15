@@ -14,6 +14,7 @@ export default function App(){
         <Route path="/" element={<Home />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
         {/* Basic signup placeholder */}
         <Route path="/signup" element={<div className="max-w-md mx-auto px-6 py-10"><h1 className="text-3xl font-bold">Create Account</h1><p className="text-gray-600">Coming soon — use Login for demo.</p></div>} />
       </Route>

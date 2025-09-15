@@ -10,6 +10,9 @@ import solutions from './routes/solutions.js'
 import realtime from './routes/realtime.js'
 
 
+
+
+
 dotenv.config();
 
 const app = express();
@@ -19,6 +22,7 @@ app.use(morgan('dev'));
 app.use('/api/feedback', feedback);
 app.use('/api/solutions', solutions);
 app.use('/api/realtime', realtime);
+app.use('/api/auth', auth);
 
 const PORT = process.env.PORT || 4000;
 

@@ -18,8 +18,8 @@ export default function Footer(){
         </div>
         <div>
           <div className="text-white font-semibold mb-2">Contact Us</div>
-          <div className="flex items-center gap-2"><Mail size={16}/> hello@hack8r.dev</div>
-          <div className="flex items-center gap-2"><Phone size={16}/> +91-00000-00000</div>
+          <div className="flex items-center gap-2"><Mail size={16}/> riddhimehrotra99@gmail.com</div>
+          <div className="flex items-center gap-2"><Phone size={16}/> +91-9140196580</div>
           <div className="flex items-center gap-2"><MapPin size={16}/> Anywhere, Earth</div>
         </div>
         <div>

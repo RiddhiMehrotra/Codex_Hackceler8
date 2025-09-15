@@ -90,15 +90,7 @@ export default function Home(){
 
       {/* Feedback + footer */}
       <section className="max-w-7xl mx-auto px-6 pb-16 grid md:grid-cols-2 gap-8">
-        <div className="bg-white rounded-2xl shadow p-6">
-          <h3 className="text-xl font-semibold mb-2">Contact Us</h3>
-          <p className="text-gray-600">Have questions about pilots or integrations? Reach out.</p>
-          <div className="mt-4 text-sm text-gray-700 space-y-1">
-            <div>Email: <a className="underline" href="mailto:hello@hack8r.dev">hello@hack8r.dev</a></div>
-            <div>Phone: +91-00000-00000</div>
-            <div>Address: Anywhere, Earth</div>
-          </div>
-        </div>
+      
         <FeedbackForm />
       </section>
 
