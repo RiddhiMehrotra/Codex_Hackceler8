@@ -1,4 +1,4 @@
-# hack8r – Climate Sustainability Action Through Technologies
+# hackceler8 – Climate Sustainability Action Through Technologies
 
 This repo includes:
 - React (Vite + Tailwind) frontend
