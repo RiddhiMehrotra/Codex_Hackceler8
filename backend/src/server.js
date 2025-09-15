@@ -5,6 +5,13 @@ import dotenv from 'dotenv';
 import auth from './routes/auth.js';
 import sensors from './routes/sensors.js';
 import { connectMongo, connectPostgres } from './db/index.js';
+import feedback from './routes/feedback.js';
+import solutions from './routes/solutions.js'
+import realtime from './routes/realtime.js'
+
+
+
+
 
 dotenv.config();
 
@@ -12,6 +19,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
+app.use('/api/feedback', feedback);
+app.use('/api/solutions', solutions);
+app.use('/api/realtime', realtime);
+app.use('/api/auth', auth);
 
 const PORT = process.env.PORT || 4000;
 
