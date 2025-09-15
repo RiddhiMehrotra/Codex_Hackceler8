@@ -1,40 +1,55 @@
-import express from 'express';
-import cors from 'cors';
-import morgan from 'morgan';
-import dotenv from 'dotenv';
-import auth from './routes/auth.js';
-import sensors from './routes/sensors.js';
-import { connectMongo, connectPostgres } from './db/index.js';
-import feedback from './routes/feedback.js';
-import solutions from './routes/solutions.js'
-import realtime from './routes/realtime.js'
+// backend/src/server.js
+import express from 'express'
+import cors from 'cors'
+import morgan from 'morgan'
+import dotenv from 'dotenv'
 
+// Load .env (optional)
+dotenv.config()
 
+// Routes
+import authRoutes from './routes/auth.js'
+import realtimeRoutes from './routes/realtime.js'
 
+const app = express()
 
+// ---- Core middleware ----
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: false
+}))
+app.use(express.json({ limit: '1mb' }))
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
-dotenv.config();
+// ---- Health & root ----
+app.get('/', (_req, res) => {
+  res.type('text/plain').send('✅ Backend running')
+})
+app.get('/healthz', (_req, res) => {
+  res.json({ ok: true, uptime: process.uptime() })
+})
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(morgan('dev'));
-app.use('/api/feedback', feedback);
-app.use('/api/solutions', solutions);
-app.use('/api/realtime', realtime);
-app.use('/api/auth', auth);
+// ---- API routes ----
+app.use('/api/auth', authRoutes)         // /signup, /signin, /me
+app.use('/api/realtime', realtimeRoutes) // /status, /start, /stop, /stream (SSE)
 
-const PORT = process.env.PORT || 4000;
+// ---- 404 fallback ----
+app.use((req, res, _next) => {
+  res.status(404).json({ error: 'Not found', path: req.originalUrl })
+})
 
-connectMongo(process.env.MONGO_URL || 'mongodb://localhost:27017/hack8r').catch(()=>{});
+// ---- Error handler ----
+app.use((err, _req, res, _next) => {
+  console.error('Server error:', err)
+  const status = err.status || 500
+  res.status(status).json({ error: err.message || 'Server error' })
+})
 
-const pgPool = connectPostgres();
-pgPool.query('SELECT 1').then(() => console.log('Postgres reachable')).catch(err => {
-  console.warn('Postgres check failed:', err.message);
-});
-
-app.get('/health', (_req, res) => res.json({ ok: true }));
-app.use('/api/auth', auth);
-app.use('/api/sensors', sensors);
-
-app.listen(PORT, () => console.log(`Backend running on http://localhost:${PORT}`));
+// ---- Start server ----
+const PORT = process.env.PORT || 4000
+app.listen(PORT, () => {
+  console.log(`🚀 Backend listening on http://localhost:${PORT}`)
+  if (process.env.CORS_ORIGIN) {
+    console.log(`   CORS origin: ${process.env.CORS_ORIGIN}`)
+  }
+})
