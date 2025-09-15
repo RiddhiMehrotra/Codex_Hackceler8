@@ -4,7 +4,7 @@ import Header from './components/Header'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
-import Signup from './pages/Signup'
+import Signup from './pages/signup'
 
 function Shell(){ return (<><Header /><div className="pt-16"><Outlet /></div></>) }
 

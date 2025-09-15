@@ -1,8 +1,9 @@
-// backend/src/server.js
 import express from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
 import dotenv from 'dotenv'
+import feedbackRoutes from './routes/feedback.js'
+
 
 // Load .env (optional)
 dotenv.config()
@@ -10,6 +11,8 @@ dotenv.config()
 // Routes
 import authRoutes from './routes/auth.js'
 import realtimeRoutes from './routes/realtime.js'
+import solutionsRoutes from './routes/solutions.js'
+
 
 const app = express()
 
@@ -30,8 +33,10 @@ app.get('/healthz', (_req, res) => {
 })
 
 // ---- API routes ----
-app.use('/api/auth', authRoutes)         // /signup, /signin, /me
-app.use('/api/realtime', realtimeRoutes) // /status, /start, /stop, /stream (SSE)
+app.use('/api/auth', authRoutes)             // /signup, /signin, /me
+app.use('/api/realtime', realtimeRoutes)     // /status, /start, /stop, /stream (SSE)
+app.use('/api/solutions', solutionsRoutes)   // solutions cards
+app.use('/api/feedback', feedbackRoutes)     // <-- NEW (feedback form → email)
 
 // ---- 404 fallback ----
 app.use((req, res, _next) => {
