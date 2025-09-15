@@ -1,32 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import FeatureCard from "../components/FeatureCard";
 import FeedbackForm from "../components/FeedbackForm";
 import Footer from "../components/Footer";
 import {
-  Sun,
-  Wind,
-  Battery,
-  Brain,
-  Droplets,
-  Recycle,
-  Sparkles,
+  Sun, Wind, Battery, Brain, Droplets, Recycle, Sparkles,
 } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
-const ICONS = {
-  sun: Sun,
-  wind: Wind,
-  battery: Battery,
-  brain: Brain,
-  droplets: Droplets,
-  recycle: Recycle,
-  sparkles: Sparkles,
-};
+const ICONS = { sun: Sun, wind: Wind, battery: Battery, brain: Brain, droplets: Droplets, recycle: Recycle, sparkles: Sparkles };
 const IconFrom = (key) => {
   const C = ICONS[(key || "").toLowerCase()] || Sparkles;
   return <C className="text-emerald-600" />;
 };
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 export default function Home() {
   const loc = useLocation();
@@ -36,38 +24,65 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // show banner if redirected after login
+  // mounted ref to avoid setState on unmounted
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  // toast after login
   useEffect(() => {
     if (loc.state?.justLoggedIn) {
       setShowWelcome(true);
-      const t = setTimeout(() => setShowWelcome(false), 3000);
+      const t = setTimeout(() => setShowWelcome(false), 2800);
       return () => clearTimeout(t);
     }
   }, [loc.state]);
 
-  async function load() {
-    try {
-      const res = await fetch("http://localhost:4000/api/solutions");
-      if (!res.ok) throw new Error("API error " + res.status);
-      const data = await res.json();
-      setFeatures(Array.isArray(data) ? data : []);
-      setError("");
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 10000); // auto-refresh every 10s
-    return () => clearInterval(t);
+  const load = useMemo(() => {
+    let controller;
+    return async function loadOnce() {
+      try {
+        if (controller) controller.abort();
+        controller = new AbortController();
+        const res = await fetch(`${API_BASE}/api/solutions`, { signal: controller.signal });
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+        const data = await res.json();
+        if (!mounted.current) return;
+        setFeatures(Array.isArray(data) ? data : []);
+        setError("");
+      } catch (e) {
+        if (!mounted.current) return;
+        if (e.name !== "AbortError") setError(e.message || "Failed to load");
+      } finally {
+        if (mounted.current) setLoading(false);
+      }
+    };
   }, []);
+
+  // poll while tab visible
+  useEffect(() => {
+    let interval;
+    const start = () => {
+      load();
+      interval = setInterval(load, 10000);
+    };
+    const stop = () => interval && clearInterval(interval);
+
+    start();
+    const vis = () => (document.hidden ? stop() : start());
+    document.addEventListener("visibilitychange", vis);
+
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", vis);
+    };
+  }, [load]);
 
   return (
     <div>
-      {/* Welcome toast after login */}
+      {/* Welcome toast */}
       <AnimatePresence>
         {showWelcome && (
           <motion.div
@@ -91,8 +106,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
-              Climate Action Through{" "}
-              <span className="text-white/90">Smart Technology</span>
+              Climate Action Through <span className="text-white/90">Smart Technology</span>
             </motion.h1>
             <motion.p
               className="mt-6 text-lg md:text-xl text-white/90 max-w-3xl"
@@ -100,8 +114,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1, duration: 0.6 }}
             >
-              Real-time sensing, analytics, and insights that make sustainability
-              visible and actionable.
+              Real-time sensing, analytics, and insights that make sustainability visible and actionable.
             </motion.p>
             <motion.div
               className="mt-10 flex flex-wrap items-center gap-4"
@@ -109,18 +122,18 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
             >
-              <a
-                href="/dashboard"
+              <Link
+                to="/dashboard"
                 className="bg-white text-black px-5 py-3 rounded-full font-semibold hover:bg-white/90 transition"
               >
                 Open Dashboard
-              </a>
-              <a
-                href="/signup"
+              </Link>
+              <Link
+                to="/signup"
                 className="border border-white/70 text-white px-5 py-3 rounded-full font-semibold hover:bg-white/10 transition"
               >
                 Create account
-              </a>
+              </Link>
             </motion.div>
           </div>
         </div>
@@ -128,17 +141,22 @@ export default function Home() {
 
       {/* Dynamic features */}
       <section className="max-w-7xl mx-auto px-6 py-16">
-        <h2 className="text-3xl md:text-4xl font-bold text-center">
-          Innovative Climate Solutions
-        </h2>
-        <p className="text-gray-600 text-center mt-2">
-          Cutting-edge tech that delivers sustainable impact.
-        </p>
+        <h2 className="text-3xl md:text-4xl font-bold text-center">Innovative Climate Solutions</h2>
+        <p className="text-gray-600 text-center mt-2">Cutting-edge tech that delivers sustainable impact.</p>
 
         {loading && (
-          <div className="text-center text-gray-500 mt-10">Loading…</div>
+          <div className="grid md:grid-cols-3 gap-6 mt-10">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-40 rounded-2xl bg-gray-200/60 animate-pulse" />
+            ))}
+          </div>
         )}
-        {error && <div className="text-center text-red-600 mt-4">{error}</div>}
+
+        {error && (
+          <div className="text-center text-red-600 mt-6">
+            {error} — check backend at <code className="px-1 py-0.5 bg-gray-100 rounded">VITE_API_URL</code> or server logs.
+          </div>
+        )}
 
         {!loading && !error && (
           <div className="grid md:grid-cols-3 gap-6 mt-10">
@@ -154,7 +172,7 @@ export default function Home() {
             ))}
             {features.length === 0 && (
               <div className="col-span-full text-center text-gray-500">
-                No solutions yet — add via POST /api/solutions.
+                No solutions yet — add via <code>POST {API_BASE}/api/solutions</code>.
               </div>
             )}
           </div>
@@ -162,9 +180,9 @@ export default function Home() {
       </section>
 
       {/* Feedback + footer */}
-      <section className="max-w-7xl mx-auto px-6 pb-16 grid md:grid-cols-2 gap-8">
-        <FeedbackForm />
-      </section>
+      <section className="max-w-7xl mx-auto px-6 pb-16">
+  <FeedbackForm />
+</section>
 
       <Footer />
     </div>

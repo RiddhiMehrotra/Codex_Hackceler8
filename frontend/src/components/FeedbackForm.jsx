@@ -1,50 +1,94 @@
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
 
-export default function FeedbackForm(){
-  const [loading, setLoading] = useState(false)
-  const [done, setDone] = useState(false)
-  const [error, setError] = useState('')
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
-  async function submit(e){
+export default function FeedbackForm() {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [rating, setRating] = useState('')
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [result, setResult] = useState(null)
+
+  async function onSubmit(e) {
     e.preventDefault()
-    setLoading(true); setDone(false); setError('')
-    const form = new FormData(e.currentTarget)
-    const body = {
-      name: form.get('name'),
-      email: form.get('email'),
-      message: form.get('message'),
-    }
-    try{
-      // backend route you’ll add below
-      const res = await fetch('http://localhost:4000/api/feedback', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+    setSending(true)
+    setResult(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, rating, message }),
       })
-      if(!res.ok) throw new Error('Failed to send')
-      setDone(true); e.currentTarget.reset()
-    }catch(err){ setError(err.message) }
-    finally{ setLoading(false) }
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed')
+      setResult({ ok: true, msg: '✅ Thanks! Your feedback has been sent.' })
+      setName(''); setEmail(''); setRating(''); setMessage('')
+    } catch (err) {
+      setResult({ ok: false, msg: err.message || 'Something went wrong' })
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
-    <motion.form
-      onSubmit={submit}
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.5 }}
-      className="bg-white rounded-2xl shadow p-10 space-y-4"
-    >
-      <h3 className="text-xl font-semibold">Send Feedback</h3>
-      <input name="name" placeholder="Your name" className="w-full border rounded px-3 py-2" required />
-      <input name="email" type="email" placeholder="Email" className="w-full border rounded px-3 py-2" required />
-      <textarea name="message" placeholder="What can we improve?" rows="4" className="w-full border rounded px-3 py-2" required />
-      {error && <div className="text-red-600 text-sm">{error}</div>}
-      {done && <div className="text-green-700 text-sm">Thanks! We received your feedback.</div>}
-      <button disabled={loading} className="bg-black text-white px-5 py-2 rounded-md">
-        {loading ? 'Sending…' : 'Submit'}
-      </button>
-    </motion.form>
+    <div className="w-full">
+      <form
+        onSubmit={onSubmit}
+        className="max-w-lg mx-auto bg-white rounded-2xl shadow p-6 space-y-4"
+      >
+        <h3 className="text-xl font-semibold">Send Feedback</h3>
+
+        <input
+          className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring focus:ring-emerald-200"
+          placeholder="Your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring focus:ring-emerald-200"
+          type="email"
+          placeholder="Your email (optional)"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <select
+          className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring focus:ring-emerald-200"
+          value={rating}
+          onChange={(e) => setRating(e.target.value)}
+        >
+          <option value="">Rating (optional)</option>
+          <option>⭐</option>
+          <option>⭐⭐</option>
+          <option>⭐⭐⭐</option>
+          <option>⭐⭐⭐⭐</option>
+          <option>⭐⭐⭐⭐⭐</option>
+        </select>
+        <textarea
+          className="w-full border rounded-lg px-3 py-2 min-h-[120px] focus:outline-none focus:ring focus:ring-emerald-200"
+          placeholder="Your message…"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          required
+        />
+
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={sending}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg transition"
+          >
+            {sending ? 'Sending…' : 'Submit'}
+          </button>
+
+          {result && (
+            <span
+              className={`text-sm ${result.ok ? 'text-emerald-600' : 'text-red-600'}`}
+            >
+              {result.msg}
+            </span>
+          )}
+        </div>
+      </form>
+    </div>
   )
 }

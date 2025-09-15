@@ -18,12 +18,21 @@ router.get('/', (_req, res) => res.json(SOLUTIONS))
 router.post('/', (req, res) => {
   const { id, icon, title, desc, pill, color } = req.body || {}
   if (!id || !title) return res.status(400).json({ error: 'id and title required' })
-  SOLUTIONS.push({ id, icon: icon || 'sparkles', title, desc: desc || '', pill: pill || '', color: color || 'from-emerald-500 to-teal-600' })
+  SOLUTIONS.push({
+    id,
+    icon: icon || 'sparkles',
+    title,
+    desc: desc || '',
+    pill: pill || '',
+    color: color || 'from-emerald-500 to-teal-600'
+  })
   res.json({ ok: true })
 })
-router.post('/reset', (_req,res)=>{
-  SOLUTIONS = SOLUTIONS.slice(0,6)  // ensure defaults above remain
-  res.json({ ok:true, count: SOLUTIONS.length })
+
+// Reset to defaults
+router.post('/reset', (_req, res) => {
+  SOLUTIONS = SOLUTIONS.slice(0, 6)
+  res.json({ ok: true, count: SOLUTIONS.length })
 })
 
 export default router
